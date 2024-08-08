@@ -8,6 +8,7 @@ import './App.css';
  */
 interface IState {
   data: ServerRespond[],
+  showGraph: boolean,
 }
 
 /**
@@ -15,37 +16,52 @@ interface IState {
  * It renders title, button and Graph react element.
  */
 class App extends Component<{}, IState> {
+  interval: NodeJS.Timeout | undefined;
+
   constructor(props: {}) {
     super(props);
 
     this.state = {
-      // data saves the server responds.
-      // We use this state to parse data down to the child element (Graph) as element property
       data: [],
+      showGraph: false,
     };
   }
 
-  /**
-   * Render Graph react component with state.data parse as property data
-   */
   renderGraph() {
-    return (<Graph data={this.state.data}/>)
+    if (this.state.showGraph) {
+      return (<Graph data={this.state.data} />);
+    }
+    return null;
   }
 
-  /**
-   * Get new data from server and update the state with the new data
-   */
   getDataFromServer() {
-    DataStreamer.getData((serverResponds: ServerRespond[]) => {
-      // Update the state by creating a new array of data that consists of
-      // Previous data in the state and the new data from server
-      this.setState({ data: [...this.state.data, ...serverResponds] });
-    });
+    this.setState({ showGraph: true });
+    const fetchData = () => {
+      DataStreamer.getData((serverResponds: ServerRespond[]) => {
+        // Remove duplicate data
+        const newData = serverResponds.filter(newRespond => {
+          return !this.state.data.some(existingRespond =>
+            existingRespond.stock === newRespond.stock &&
+            existingRespond.top_ask_price === newRespond.top_ask_price &&
+            existingRespond.timestamp === newRespond.timestamp
+          );
+        });
+
+        // Update the state with the new data
+        this.setState({ data: [...this.state.data, ...newData] });
+      });
+    };
+
+    fetchData();  // Initial fetch
+    this.interval = setInterval(fetchData, 100);  // Fetch data every 100ms
   }
 
-  /**
-   * Render the App react component
-   */
+  componentWillUnmount() {
+    if (this.interval) {
+      clearInterval(this.interval);
+    }
+  }
+
   render() {
     return (
       <div className="App">
@@ -54,12 +70,7 @@ class App extends Component<{}, IState> {
         </header>
         <div className="App-content">
           <button className="btn btn-primary Stream-button"
-            // when button is click, our react app tries to request
-            // new data from the server.
-            // As part of your task, update the getDataFromServer() function
-            // to keep requesting the data every 100ms until the app is closed
-            // or the server does not return anymore data.
-            onClick={() => {this.getDataFromServer()}}>
+            onClick={() => { this.getDataFromServer() }}>
             Start Streaming Data
           </button>
           <div className="Graph">
